@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.vscode/
+*.db
+uploads/
+Kavisha (2) (1).pdf
