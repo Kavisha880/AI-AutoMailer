@@ -5,4 +5,5 @@ __pycache__/
 .vscode/
 *.db
 uploads/
+data/sent_history.csv
 Kavisha (2) (1).pdf
