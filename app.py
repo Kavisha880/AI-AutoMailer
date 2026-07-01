@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import re
 
 from utils.excel_reader import read_excel
@@ -9,10 +10,14 @@ from utils.jd_parser import (
 )
 from utils.mail_generator import generate_mail
 from utils.mail_sender import send_email
+from utils.batch_sender import send_next_batch
+from utils.history_manager import load_history
+from utils.column_mapper import detect_columns
 
-# ======================================
+
+# ==========================
 # SESSION STATE
-# ======================================
+# ==========================
 
 if "generated_mail" not in st.session_state:
     st.session_state.generated_mail = ""
@@ -20,12 +25,10 @@ if "generated_mail" not in st.session_state:
 if "email" not in st.session_state:
     st.session_state.email = ""
 
-if "subject" not in st.session_state:
-    st.session_state.subject = ""
 
-# ======================================
+# ==========================
 # PAGE CONFIG
-# ======================================
+# ==========================
 
 st.set_page_config(
     page_title="AI AutoMailer",
@@ -35,13 +38,14 @@ st.set_page_config(
 
 st.title("📧 AI AutoMailer")
 
-# ======================================
+
+# ==========================
 # INPUTS
-# ======================================
+# ==========================
 
 role = st.text_input(
-    "Enter Role",
-    placeholder="AI/ML Intern"
+    "Enter Default Role",
+    placeholder="AI/ML Engineer"
 )
 
 contact_source = st.radio(
@@ -53,9 +57,10 @@ contact_source = st.radio(
     ]
 )
 
-# ======================================
+
+# ==========================
 # JD INPUT
-# ======================================
+# ==========================
 
 if contact_source == "JD Paste":
 
@@ -64,9 +69,10 @@ if contact_source == "JD Paste":
         height=250
     )
 
-# ======================================
-# CONTACT LIST
-# ======================================
+
+# ==========================
+# CONTACT LIST INPUT
+# ==========================
 
 elif contact_source == "Contact List Paste":
 
@@ -74,30 +80,38 @@ elif contact_source == "Contact List Paste":
         "Paste Emails",
         height=250,
         placeholder="""
-hr@company.com
-jobs@company.com
-careers@company.com
+hr@google.com
+jobs@microsoft.com
+careers@adobe.com
 """
     )
 
-# ======================================
-# EXCEL
-# ======================================
+
+# ==========================
+# EXCEL INPUT
+# ==========================
 
 elif contact_source == "Excel Upload":
 
     uploaded_file = st.file_uploader(
-        "Upload Excel",
-        type=["xlsx", "xls"]
+        "Upload Excel / CSV",
+        type=[
+            "xlsx",
+            "xls",
+            "csv"
+        ]
     )
 
-# ======================================
+
+# ==========================
 # CONTINUE BUTTON
-# ======================================
+# ==========================
 
 if st.button("Continue"):
 
-    # ---------------- JD ----------------
+    # ==========================
+    # JD MODE
+    # ==========================
 
     if contact_source == "JD Paste":
 
@@ -113,13 +127,12 @@ if st.button("Continue"):
 
         try:
 
-            generated_mail = generate_mail(
+            st.session_state.generated_mail = generate_mail(
                 role=role,
                 company=company or "",
                 jd=jd_text
             )
 
-            st.session_state.generated_mail = generated_mail
             st.session_state.email = email
 
         except Exception as e:
@@ -128,7 +141,9 @@ if st.button("Continue"):
                 f"Mail generation failed: {str(e)}"
             )
 
-    # ---------------- CONTACT LIST ----------------
+    # ==========================
+    # CONTACT LIST MODE
+    # ==========================
 
     elif contact_source == "Contact List Paste":
 
@@ -137,43 +152,148 @@ if st.button("Continue"):
             contacts
         )
 
+        st.subheader("📧 Detected Emails")
+
         if emails:
 
             st.success(
-                f"{len(emails)} emails found."
+                f"{len(emails)} emails found"
             )
 
             for email in emails:
+
                 st.write(email)
 
         else:
 
             st.warning(
-                "No valid email found."
+                "No valid emails found"
+            )
+# ==========================
+# EXCEL MODE
+# ==========================
+
+if contact_source == "Excel Upload":
+
+    if uploaded_file is None:
+
+        st.warning(
+            "Please upload an Excel or CSV file."
+        )
+
+    else:
+
+        df = read_excel(uploaded_file)
+
+        columns = detect_columns(df)
+
+        if columns["email"] is None:
+
+            st.error(
+                "❌ No Email column found."
             )
 
-    # ---------------- EXCEL ----------------
+            st.stop()
 
-    elif contact_source == "Excel Upload":
+        email_column = columns["email"]
 
-        if uploaded_file:
+        history = load_history()
 
-            df = read_excel(uploaded_file)
+        total = len(df)
+
+        already_sent = len(
+
+            df[
+                df[email_column]
+                .astype(str)
+                .str.lower()
+                .isin(history)
+            ]
+
+        )
+
+        remaining = total - already_sent
+
+        st.subheader("📊 Recruiter Summary")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            st.metric(
+                "Total Recruiters",
+                total
+            )
+
+        with col2:
+
+            st.metric(
+                "Already Contacted",
+                already_sent
+            )
+
+        with col3:
+
+            st.metric(
+                "Remaining",
+                remaining
+            )
+
+        st.dataframe(
+            df.head(),
+            use_container_width=True
+        )
+
+        batch_size = st.slider(
+            "Emails Per Batch",
+            min_value=1,
+            max_value=100,
+            value=50
+        )
+
+        if st.button("🚀 Send Next Batch"):
+
+            with st.spinner(
+                "Generating mails and sending..."
+            ):
+
+                sent, skipped, failed, report = send_next_batch(
+                    df=df,
+                    batch_size=batch_size,
+                    default_role=role
+                )
 
             st.success(
-                f"{len(df)} records found."
+                f"✅ Sent : {sent}"
             )
 
-            st.dataframe(df.head())
-
-        else:
-
-            st.warning(
-                "Please upload an Excel file."
+            st.info(
+                f"⏭ Skipped : {skipped}"
             )
-# ======================================
-# GENERATED MAIL
-# ======================================
+
+            if failed:
+
+                st.error(
+                    f"❌ Failed : {failed}"
+                )
+
+            if report:
+
+                st.subheader(
+                    "📄 Batch Report"
+                )
+
+                report_df = pd.DataFrame(
+                    report
+                )
+
+                st.dataframe(
+                    report_df,
+                    use_container_width=True
+                )
+# ==========================
+# GENERATED MAIL SECTION
+# ==========================
 
 if st.session_state.generated_mail:
 
@@ -185,43 +305,34 @@ if st.session_state.generated_mail:
         height=450
     )
 
-    if st.button("📨 Send Mail"):
+    if st.button("📨 Send Mail Now"):
 
         try:
 
-            mail_text = st.session_state.generated_mail
+            lines = st.session_state.generated_mail.split("\n")
 
-            lines = mail_text.split("\n")
+            subject = ""
 
-            # -----------------------------
-            # Extract Subject
-            # -----------------------------
+            if len(lines):
 
-            subject_line = "AI/ML Opportunity"
+                subject = (
+                    lines[0]
+                    .replace("Subject:", "")
+                    .strip()
+                )
 
-            for i, line in enumerate(lines):
+            body = st.session_state.generated_mail
 
-                if line.lower().startswith("subject:"):
+            if body.startswith("Subject:"):
 
-                    subject_line = (
-                        line.replace("Subject:", "")
-                        .strip()
-                    )
-
-                    body_text = "\n".join(
-                        lines[i + 2:]
-                    )
-
-                    break
-
-            else:
-
-                body_text = mail_text
+                body = "\n".join(
+                    body.split("\n")[2:]
+                )
 
             send_email(
                 recipient_email=st.session_state.email,
-                subject=subject_line,
-                body=body_text
+                subject=subject,
+                body=body
             )
 
             st.success(
@@ -231,5 +342,16 @@ if st.session_state.generated_mail:
         except Exception as e:
 
             st.error(
-                f"❌ Mail sending failed:\n\n{e}"
+                f"❌ Mail sending failed : {e}"
             )
+
+
+# ==========================
+# FOOTER
+# ==========================
+
+st.markdown("---")
+
+st.caption(
+    "🚀 AI AutoMailer | Built with Streamlit + Groq + Gmail SMTP"
+)

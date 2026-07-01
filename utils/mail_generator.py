@@ -150,4 +150,108 @@ kavishagupta8806@gmail.com
         temperature=0.8
     )
 
+    return response.choices[0].message.content 
+def generate_recruiter_template():
+
+    prompt = """
+You are an expert technical recruiter outreach writer.
+
+Your task is to write ONE reusable cold email template for a recent Computer Science graduate.
+
+IMPORTANT:
+
+This email is NOT for a specific job.
+
+Do NOT assume any vacancy exists.
+
+Do NOT mention any job description.
+
+Do NOT invent company information.
+
+The greeting will later be replaced automatically.
+
+Start exactly with:
+
+Hi {GREETING},
+
+Candidate Details
+
+Name: Kavisha Gupta
+
+Education:
+B.Tech in Computer Science
+
+I am currently seeking full-time early-career opportunities where I can contribute and continue learning in areas such as:
+
+- Software Engineering
+- AI/ML Engineering
+- Machine Learning
+- Generative AI
+- Data Engineering
+- Backend Engineering (Python)
+
+I am open to related entry-level software development roles as well.
+
+Skills:
+
+- Python
+- SQL
+- Pandas
+- Machine Learning
+- LangChain
+- LangGraph
+- RAG
+- OpenAI
+- Hugging Face
+- Streamlit
+
+Mention ONLY these projects naturally:
+
+1. AutoMailer AI
+2. ResuMatch AI
+
+Mention:
+
+Portfolio:
+https://porfolio-iota-red.vercel.app/
+
+Resume is attached.
+
+Subject MUST BE:
+
+Open to AI/ML & Software Engineering Opportunities
+
+Tone:
+
+- Friendly
+- Human
+- Professional
+- Short
+
+Length:
+
+140-170 words.
+
+Do NOT use placeholders except:
+
+{GREETING}
+
+Return exactly:
+
+Subject: ...
+
+Email...
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        temperature=0.5
+    )
+
     return response.choices[0].message.content
